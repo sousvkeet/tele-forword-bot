@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  telegram-forwarder:
+    build: .
+    container_name: telegram-auto-forwarder
+    restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "5001:5001"
+    
+    # Environment variables
+    environment:
+      - FLASK_PORT=5001
+      - FLASK_ENV=production
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
+      
+      # Rate limiting settings
+      - MAX_MESSAGES_PER_MINUTE=${MAX_MESSAGES_PER_MINUTE:-10}
+      - MAX_DAILY_FORWARDS=${MAX_DAILY_FORWARDS:-400}
+      - DELAY_BETWEEN_FORWARDS=${DELAY_BETWEEN_FORWARDS:-3}
+      
+      # Ban protection settings
+      - MAX_CONSECUTIVE_ERRORS=${MAX_CONSECUTIVE_ERRORS:-5}
+      - COOLDOWN_HOURS=${COOLDOWN_HOURS:-2}
+      - MAX_CONCURRENT_FORWARDS=${MAX_CONCURRENT_FORWARDS:-5}
+      
+      # Security settings
+      - ENABLE_BAN_PROTECTION=${ENABLE_BAN_PROTECTION:-True}
+    
+    # Volume mounts for data persistence
+    volumes:
+      - telegram_data:/app/data
+      - telegram_logs:/app/logs
+      - ./telegram_forwarder.db:/app/telegram_forwarder.db
+      - ./telegram_forwarder_simple.session:/app/telegram_forwarder_simple.session
+    
+    # Network configuration
+    networks:
+      - telegram_network
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Named volumes for data persistence
+volumes:
+  telegram_data:
+    driver: local
+  telegram_logs:
+    driver: local
+
+# Custom network
+networks:
+  telegram_network:
+    driver: bridge

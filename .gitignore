@@ -1,0 +1,46 @@
+# Virtual Environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Telegram Session Files
+*.session
+
+# Database files
+*.db
+*.db-wal
+*.db-shm
+
+# Log files
+*.log
+logs/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Development files
+test_*.py
+debug_*.py
+check_*.py
+verify_*.py
+*.md.backup
+flask_session/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+desktop.ini

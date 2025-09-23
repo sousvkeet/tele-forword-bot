@@ -1,0 +1,26 @@
+[Unit]
+Description=Telegram Auto Forwarder
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Desktop/tg-auto-forward-bot
+Environment=PATH=/home/ubuntu/Desktop/tg-auto-forward-bot/venv/bin
+ExecStart=/home/ubuntu/Desktop/tg-auto-forward-bot/venv/bin/python app.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-forwarder
+
+# Security
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/ubuntu/Desktop/tg-auto-forward-bot
+
+[Install]
+WantedBy=multi-user.target

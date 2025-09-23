@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Telegram Auto Forwarder</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Modern UI CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 2rem;
+        }
+        
+        .login-card {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 2.5rem;
+            animation: slideUp 0.4s ease;
+        }
+        
+        .login-logo {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-logo-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 1rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 136, 204, 0.3);
+        }
+        
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 0.5rem;
+        }
+        
+        .login-subtitle {
+            color: var(--gray-600);
+            font-size: 0.875rem;
+        }
+        
+        .form-icon-input {
+            position: relative;
+        }
+        
+        .form-icon-input i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+        }
+        
+        .form-icon-input input {
+            padding-left: 2.75rem;
+        }
+        
+        .remember-forgot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--gray-700);
+        }
+        
+        .forgot-link {
+            font-size: 0.875rem;
+            color: var(--primary);
+            text-decoration: none;
+            transition: color var(--transition);
+        }
+        
+        .forgot-link:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .divider {
+            text-align: center;
+            margin: 1.5rem 0;
+            position: relative;
+            color: var(--gray-500);
+            font-size: 0.875rem;
+        }
+        
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 45%;
+            height: 1px;
+            background: var(--gray-300);
+        }
+        
+        .divider::before {
+            left: 0;
+        }
+        
+        .divider::after {
+            right: 0;
+        }
+        
+        .social-login {
+            display: flex;
+            gap: 0.75rem;
+        }
+        
+        .social-btn {
+            flex: 1;
+            padding: 0.625rem;
+            border: 1px solid var(--gray-300);
+            background: white;
+            border-radius: var(--radius);
+            color: var(--gray-700);
+            transition: all var(--transition);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .social-btn:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-400);
+        }
+        
+        .signup-link {
+            text-align: center;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--gray-200);
+            font-size: 0.875rem;
+            color: var(--gray-600);
+        }
+        
+        .signup-link a {
+            color: var(--primary);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color var(--transition);
+        }
+        
+        .signup-link a:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+        
+        .alert {
+            margin-bottom: 1rem;
+        }
+        
+        .floating-shapes {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+        
+        .shape {
+            position: absolute;
+            opacity: 0.1;
+        }
+        
+        .shape-1 {
+            width: 400px;
+            height: 400px;
+            background: white;
+            border-radius: 50%;
+            top: -200px;
+            left: -200px;
+            animation: float 20s infinite ease-in-out;
+        }
+        
+        .shape-2 {
+            width: 300px;
+            height: 300px;
+            background: white;
+            border-radius: 50%;
+            bottom: -150px;
+            right: -150px;
+            animation: float 15s infinite ease-in-out reverse;
+        }
+        
+        .shape-3 {
+            width: 200px;
+            height: 200px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 10%;
+            animation: float 25s infinite ease-in-out;
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            33% {
+                transform: translate(30px, -30px) rotate(120deg);
+            }
+            66% {
+                transform: translate(-20px, 20px) rotate(240deg);
+            }
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Loading state */
+        .btn-loading {
+            position: relative;
+            color: transparent !important;
+            pointer-events: none;
+        }
+        
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 1.25rem;
+            height: 1.25rem;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid white;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.6s linear infinite;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 1rem;
+            }
+            
+            .login-card {
+                padding: 1.75rem;
+            }
+            
+            .login-logo-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 2rem;
+            }
+            
+            .login-title {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating Shapes Background -->
+    <div class="floating-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+    </div>
+    
+    <!-- Login Container -->
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Logo -->
+            <div class="login-logo">
+                <div class="login-logo-icon">
+                    <i class="fab fa-telegram"></i>
+                </div>
+                <h1 class="login-title">Welcome Back</h1>
+                <p class="login-subtitle">Sign in to your account to continue</p>
+            </div>
+            
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ 'danger' if category == 'error' else category }}">
+                            <i class="alert-icon fas fa-{{ 'exclamation-circle' if category == 'error' else 'info-circle' }}"></i>
+                            <div class="alert-content">
+                                <div class="alert-message">{{ message }}</div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <!-- Login Form -->
+            <form id="loginForm" method="POST" action="/login">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <div class="form-icon-input">
+                        <i class="fas fa-user"></i>
+                        <input type="text" 
+                               class="form-input" 
+                               name="username" 
+                               id="username"
+                               placeholder="Enter your username"
+                               required
+                               autofocus>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <div class="form-icon-input">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" 
+                               class="form-input" 
+                               name="password"
+                               id="password" 
+                               placeholder="Enter your password"
+                               required>
+                    </div>
+                </div>
+                
+                <div class="remember-forgot">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="#" class="forgot-link">Forgot password?</a>
+                </div>
+                
+                <button type="submit" class="btn btn-primary login-btn" id="loginBtn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Sign In
+                </button>
+            </form>
+            
+            <!-- Divider -->
+            <div class="divider">OR</div>
+            
+            <!-- Social Login -->
+            <div class="social-login">
+                <button class="social-btn" onclick="alert('Telegram login coming soon!')">
+                    <i class="fab fa-telegram"></i>
+                    Telegram
+                </button>
+                <button class="social-btn" onclick="alert('Google login coming soon!')">
+                    <i class="fab fa-google"></i>
+                    Google
+                </button>
+            </div>
+            
+            <!-- Sign Up Link -->
+            <div class="signup-link">
+                Don't have an account? <a href="#">Sign up</a>
+            </div>
+        </div>
+        
+        <!-- Demo Credentials -->
+        <div style="text-align: center; margin-top: 2rem; color: white; background: rgba(0, 0, 0, 0.2); padding: 1rem; border-radius: 0.5rem; backdrop-filter: blur(10px);">
+            <p style="font-size: 0.875rem; margin-bottom: 0.5rem;">
+                <i class="fas fa-info-circle"></i> Demo Credentials
+            </p>
+            <p style="font-size: 0.75rem; opacity: 0.9;">
+                Username: <strong>admin</strong> | Password: <strong>admin</strong>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        // Form submission handling
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            const btn = document.getElementById('loginBtn');
+            
+            // Add loading state
+            btn.classList.add('btn-loading');
+            
+            // Form will submit normally since we're not preventing default
+            // This ensures proper login flow as per the memories
+        });
+        
+        // Auto-focus username field
+        document.getElementById('username').focus();
+        
+        // Enter key handling for better UX
+        document.getElementById('password').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('loginForm').submit();
+            }
+        });
+        
+        // Password visibility toggle (optional enhancement)
+        const passwordInput = document.getElementById('password');
+        const togglePassword = document.createElement('i');
+        togglePassword.className = 'fas fa-eye';
+        togglePassword.style.cssText = 'position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--gray-400);';
+        
+        passwordInput.parentElement.appendChild(togglePassword);
+        
+        togglePassword.addEventListener('click', function() {
+            const type = passwordInput.type === 'password' ? 'text' : 'password';
+            passwordInput.type = type;
+            this.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+        });
+    </script>
+</body>
+</html>

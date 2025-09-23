@@ -1,0 +1,69 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.venv
+venv/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Development files
+test_*.py
+debug_*.py
+check_*.py
+verify_*.py
+*.md.backup
+
+# Temporary files
+*.tmp
+*.bak
+flask_session/
+
+# Logs
+*.log
+logs/
+
+# Documentation (keep essential ones)
+README.md
+PRODUCTION_INSTALL.md
+PRODUCTION_READY.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Database files (will be mounted as volumes)
+*.db-wal
+*.db-shm

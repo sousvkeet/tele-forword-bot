@@ -1,0 +1,2039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Auto Forwarder - Dashboard</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Modern UI CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern-ui.css') }}">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-logo">
+                    <div class="sidebar-logo-icon">
+                        <i class="fab fa-telegram"></i>
+                    </div>
+                    <span class="sidebar-logo-text">TG Forwarder</span>
+                </a>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-item">
+                    <a href="#dashboard" class="nav-link active">
+                        <i class="nav-icon fas fa-tachometer-alt"></i>
+                        <span class="nav-text">Dashboard</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#rules" class="nav-link">
+                        <i class="nav-icon fas fa-route"></i>
+                        <span class="nav-text">Forwarding Rules</span>
+                        <span class="nav-badge">{{ rules|length if rules else 0 }}</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#activity" class="nav-link">
+                        <i class="nav-icon fas fa-history"></i>
+                        <span class="nav-text">Activity</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#settings" class="nav-link">
+                        <i class="nav-icon fas fa-cog"></i>
+                        <span class="nav-text">Settings</span>
+                    </a>
+                </div>
+                <div class="nav-item">
+                    <a href="#telegram" class="nav-link">
+                        <i class="nav-icon fas fa-link"></i>
+                        <span class="nav-text">Telegram</span>
+                        <span class="telegram-status badge {{ 'badge-success' if telegram_authenticated else 'badge-warning' }}">
+                            {{ 'Connected' if telegram_authenticated else 'Not Connected' }}
+                        </span>
+                    </a>
+                </div>
+            </nav>
+            
+            <div class="sidebar-footer" style="margin-top: auto; padding: 1rem;">
+                <a href="/logout" class="nav-link text-danger">
+                    <i class="nav-icon fas fa-sign-out-alt"></i>
+                    <span class="nav-text">Logout</span>
+                </a>
+            </div>
+        </aside>
+        
+        <!-- Sidebar Overlay for Mobile -->
+        <div class="sidebar-overlay"></div>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="topbar-toggle" id="sidebarToggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    
+                    <div class="topbar-search">
+                        <i class="topbar-search-icon fas fa-search"></i>
+                        <input type="text" 
+                               class="topbar-search-input" 
+                               id="searchInput"
+                               placeholder="Search rules...">
+                    </div>
+                </div>
+                
+                <div class="topbar-right">
+                    <button class="topbar-button" id="themeToggle" title="Toggle Theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    
+                    <button class="topbar-button" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="notification-badge"></span>
+                    </button>
+                    
+                    <div class="user-menu">
+                        <div class="user-avatar">
+                            {{ session.username[0]|upper if session.username else 'A' }}
+                        </div>
+                        <div class="user-info">
+                            <div class="user-name">{{ session.username or 'Admin' }}</div>
+                            <div class="user-role">Administrator</div>
+                        </div>
+                    </div>
+                    
+                    <div class="connection-indicator" title="Server Connection"></div>
+                </div>
+            </header>
+            
+            <!-- Page Content -->
+            <div class="page-content">
+                <!-- Dashboard Section -->
+                <section id="dashboard" class="page-section">
+                    <div class="page-header">
+                        <h1 class="page-title">Dashboard</h1>
+                        <p class="page-description">Monitor your Telegram auto-forwarding activity</p>
+                    </div>
+                    
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-4 md:grid-cols-2 mb-6">
+                        <!-- Forwarding Status -->
+                        <div class="stat-card">
+                            <div class="stat-card-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
+                                <i class="fas fa-broadcast-tower forwarding-status-icon"></i>
+                            </div>
+                            <div class="stat-card-content">
+                                <div class="stat-card-value forwarding-status-text">
+                                    {{ 'Active' if is_forwarding else 'Inactive' }}
+                                </div>
+                                <div class="stat-card-label">Forwarding Status</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Today's Forwards -->
+                        <div class="stat-card">
+                            <div class="stat-card-icon" style="background: rgba(59, 130, 246, 0.1); color: var(--info);">
+                                <i class="fas fa-paper-plane"></i>
+                            </div>
+                            <div class="stat-card-content">
+                                <div class="stat-card-value" data-stat="todays-forwards">
+                                    {{ stats.todays_forwards if stats else 0 }}
+                                </div>
+                                <div class="stat-card-label">Messages Today</div>
+                            </div>
+                            <span class="stat-card-change positive">
+                                <i class="fas fa-arrow-up"></i> 12%
+                            </span>
+                        </div>
+                        
+                        <!-- Active Rules -->
+                        <div class="stat-card">
+                            <div class="stat-card-icon" style="background: rgba(124, 58, 237, 0.1); color: var(--secondary);">
+                                <i class="fas fa-filter"></i>
+                            </div>
+                            <div class="stat-card-content">
+                                <div class="stat-card-value" data-stat="active-rules">
+                                    {{ active_rules if active_rules else 0 }}
+                                </div>
+                                <div class="stat-card-label">Active Rules</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Daily Limit -->
+                        <div class="stat-card">
+                            <div class="stat-card-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">
+                                <i class="fas fa-gauge-high"></i>
+                            </div>
+                            <div class="stat-card-content">
+                                <div class="stat-card-value">
+                                    <span data-stat="todays-forwards">{{ stats.todays_forwards if stats else 0 }}</span>/<span data-stat="max-daily">{{ stats.max_daily_forwards if stats else 100 }}</span>
+                                </div>
+                                <div class="stat-card-label">Daily Limit</div>
+                            </div>
+                            <div class="progress mt-2" style="height: 4px;">
+                                <div class="daily-progress-bar bg-success" style="width: {{ ((stats.todays_forwards / stats.max_daily_forwards * 100) if stats else 0) }}%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Actions & Status -->
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <!-- Quick Actions Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Quick Actions</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button class="btn btn-primary" id="addRuleBtn" onclick="showAddRuleModal()">
+                                        <i class="fas fa-plus"></i> Add Rule
+                                    </button>
+                                    <button class="btn btn-outline" onclick="showSection('telegram')">
+                                        <i class="fas fa-link"></i> Connect Telegram
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="app.loadInitialData()">
+                                        <i class="fas fa-sync"></i> Refresh
+                                    </button>
+                                    <button class="btn btn-outline" onclick="window.location.href='#settings'">
+                                        <i class="fas fa-cog"></i> Settings
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- System Status Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">System Status</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="status-list">
+                                    <div class="status-item flex justify-between items-center mb-3">
+                                        <span>Telegram Connection</span>
+                                        {% if telegram_authenticated %}
+                                            <span class="badge badge-success">
+                                                <i class="fas fa-check"></i> Connected
+                                            </span>
+                                        {% else %}
+                                            <span class="badge badge-warning">
+                                                <i class="fas fa-times"></i> Not Connected
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="status-item flex justify-between items-center mb-3">
+                                        <span>Server Status</span>
+                                        <span class="badge badge-success">
+                                            <i class="fas fa-check"></i> Online
+                                        </span>
+                                    </div>
+                                    <div class="status-item flex justify-between items-center mb-3">
+                                        <span>Error Count</span>
+                                        <span class="badge badge-info" data-stat="error-count">0</span>
+                                    </div>
+                                    <div class="status-item flex justify-between items-center">
+                                        <span>Ban Protection</span>
+                                        <span class="badge badge-success">
+                                            <i class="fas fa-shield-alt"></i> Enabled
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Rules Section -->
+                <section id="rules" class="page-section" style="display: none;">
+                    <div class="page-header mb-4">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h1 class="page-title">Forwarding Rules</h1>
+                                <p class="page-description">Manage your message forwarding rules</p>
+                            </div>
+                            <button class="btn btn-primary" onclick="showAddRuleModal()">
+                                <i class="fas fa-plus"></i> Add New Rule
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="rulesContainer">
+                        <!-- Rules will be dynamically loaded here -->
+                    </div>
+                </section>
+                
+                <!-- Activity Section -->
+                <section id="activity" class="page-section" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">Activity Feed</h1>
+                        <p class="page-description">Recent forwarding activity and events</p>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="activityFeed" class="activity-feed">
+                                <!-- Activity items will be dynamically added here -->
+                                <div class="empty-state">
+                                    <i class="fas fa-clock fa-3x text-gray-400 mb-3"></i>
+                                    <h4 class="text-gray-600">No recent activity</h4>
+                                    <p class="text-gray-500">Activity will appear here when messages are forwarded</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Settings Section -->
+                <section id="settings" class="page-section" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">Settings</h1>
+                        <p class="page-description">Configure your forwarding preferences</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Rate Limiting Settings -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Rate Limiting</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="maxMessagesPerMinute">Messages per minute</label>
+                                    <input type="number" id="maxMessagesPerMinute" class="form-input" value="10" min="1" max="30">
+                                </div>
+                                <div class="form-group">
+                                    <label for="maxDailyForwards">Daily forward limit</label>
+                                    <input type="number" id="maxDailyForwards" class="form-input" value="100" min="10" max="1000">
+                                </div>
+                                <div class="form-group">
+                                    <label for="delayBetweenForwards">Delay between forwards (seconds)</label>
+                                    <input type="number" id="delayBetweenForwards" class="form-input" value="3" min="1" max="10">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Ban Protection Settings -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Ban Protection</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="maxConsecutiveErrors">Max consecutive errors</label>
+                                    <input type="number" id="maxConsecutiveErrors" class="form-input" value="5" min="1" max="20">
+                                </div>
+                                <div class="form-group">
+                                    <label for="cooldownHours">Cooldown period (hours)</label>
+                                    <input type="number" id="cooldownHours" class="form-input" value="2" min="1" max="24">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="humanLikeBehavior" checked>
+                                        <span class="checkmark"></span>
+                                        Enable human-like behavior
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="btn btn-primary" onclick="saveSettings()">
+                            <i class="fas fa-save"></i> Save Settings
+                        </button>
+                        <button class="btn btn-secondary" onclick="resetSettings()">
+                            <i class="fas fa-undo"></i> Reset to Defaults
+                        </button>
+                    </div>
+                </section>
+                
+                <!-- Telegram Section -->
+                <section id="telegram" class="page-section" style="display: none;">
+                    <div class="page-header">
+                        <h1 class="page-title">Telegram Connection</h1>
+                        <p class="page-description">Manage your Telegram account connection</p>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="telegram-status" id="telegramStatus">
+                                {% if telegram_authenticated %}
+                                    <div class="alert alert-success">
+                                        <i class="fas fa-check-circle"></i>
+                                        <strong>Connected to Telegram</strong><br>
+                                        <small>Phone: {{ telegram_phone }}</small>
+                                    </div>
+                                    <div class="telegram-actions">
+                                        <button class="btn btn-outline" onclick="refreshTelegramStatus()">
+                                            <i class="fas fa-sync"></i> REFRESH STATUS
+                                        </button>
+                                        <button class="btn btn-danger" onclick="disconnectTelegram()">
+                                            <i class="fas fa-unlink"></i> DISCONNECT
+                                        </button>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <strong>Not Connected</strong><br>
+                                        <small>Connect your Telegram account to start forwarding</small>
+                                    </div>
+                                    <div class="telegram-actions">
+                                        <button class="btn btn-outline" onclick="refreshTelegramStatus()">
+                                            <i class="fas fa-sync"></i> CHECK STATUS
+                                        </button>
+                                        <button class="btn btn-primary" onclick="showTelegramAuthForm()">
+                                            <i class="fas fa-link"></i> CONNECT
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Telegram Authentication Form (Hidden by default) -->
+                                    <div id="telegramAuthForm" style="display: none; margin-top: 2rem;">
+                                        <div class="card">
+                                            <div class="card-header">
+                                                <h3 class="card-title">Connect to Telegram</h3>
+                                            </div>
+                                            <div class="card-body">
+                                                <form id="authForm" onsubmit="handleTelegramAuth(event)">
+                                                    <div class="form-group">
+                                                        <label for="phoneNumber">Phone Number</label>
+                                                        <input type="tel" id="phoneNumber" class="form-input" 
+                                                               placeholder="Enter your phone number (e.g., +1234567890)" 
+                                                               required>
+                                                        <small class="form-help">Include country code (e.g., +91 for India)</small>
+                                                    </div>
+                                                    
+                                                    <div id="codeStep" style="display: none;">
+                                                        <div class="form-group">
+                                                            <label for="authCode">Verification Code</label>
+                                                            <input type="text" id="authCode" class="form-input" 
+                                                                   placeholder="Enter the code from Telegram">
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div id="passwordStep" style="display: none;">
+                                                        <div class="form-group">
+                                                            <label for="twoFactorPassword">2FA Password</label>
+                                                            <input type="password" id="twoFactorPassword" class="form-input" 
+                                                                   placeholder="Enter your 2FA password">
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div class="form-actions">
+                                                        <button type="submit" class="btn btn-primary" id="authSubmitBtn">
+                                                            <i class="fas fa-paper-plane"></i> Send Code
+                                                        </button>
+                                                        <button type="button" class="btn btn-secondary" onclick="hideTelegramAuthForm()">
+                                                            <i class="fas fa-times"></i> Cancel
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Add Rule Modal -->
+    <div class="modal" id="addRuleModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h2 class="modal-title">Add Forwarding Rule</h2>
+                <button class="modal-close" onclick="closeModal('addRuleModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addRuleForm">
+                    <div class="form-group">
+                        <label class="form-label">Source Chat</label>
+                        <select class="form-select" id="ruleSource" required>
+                            <option value="">Select source...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Target Chat</label>
+                        <select class="form-select" id="ruleTarget" required>
+                            <option value="">Select target...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Keywords (comma-separated, optional)</label>
+                        <input type="text" class="form-input" id="ruleKeywords" placeholder="crypto, news, updates">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Media Types</label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="text" checked>
+                                <span>Text</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="photo" checked>
+                                <span>Photos</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="video" checked>
+                                <span>Videos</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="document" checked>
+                                <span>Documents</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="audio" checked>
+                                <span>Audio</span>
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="checkbox" name="mediaTypes" value="sticker">
+                                <span>Stickers</span>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('addRuleModal')">Cancel</button>
+                <button class="btn btn-primary" id="saveRuleBtn">
+                    <i class="fas fa-save"></i> Save Rule
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="notification-container"></div>
+    
+    <!-- Navigation Script -->
+    <script>
+        // Simple navigation
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = link.getAttribute('href').substring(1);
+                
+                // Update active nav
+                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+                
+                // Show/hide sections
+                document.querySelectorAll('.page-section').forEach(section => {
+                    section.style.display = section.id === target ? 'block' : 'none';
+                });
+            });
+        });
+        
+        // Add Rule Modal Functions
+        async function showAddRuleModal() {
+            console.log('showAddRuleModal called');
+            const modal = document.getElementById('addRuleModal');
+            if (modal) {
+                console.log('Modal found, showing...');
+                modal.style.display = 'flex';
+                modal.classList.add('show');
+                document.body.style.overflow = 'hidden';
+                console.log('Modal should be visible now');
+                
+                // Reset form if it exists
+                const form = document.getElementById('addRuleForm');
+                if (form) {
+                    form.reset();
+                    console.log('Form reset');
+                }
+                
+                // Load Telegram dialogs/chats into dropdowns
+                await loadDialogs();
+            } else {
+                console.error('Modal not found!');
+                // List all elements with id to debug
+                const allElements = document.querySelectorAll('[id]');
+                console.log('All elements with IDs:', Array.from(allElements).map(el => el.id));
+            }
+        }
+        
+        // Load Telegram dialogs for source and target dropdowns
+        async function loadDialogs() {
+            console.log('Loading dialogs...');
+            try {
+                const response = await fetch('/api/dialogs');
+                const data = await response.json();
+                
+                if (data.success && data.dialogs) {
+                    console.log('Dialogs loaded:', data.dialogs.length);
+                    
+                    const sourceSelect = document.getElementById('ruleSource');
+                    const targetSelect = document.getElementById('ruleTarget');
+                    
+                    if (sourceSelect && targetSelect) {
+                        // Clear existing options
+                        sourceSelect.innerHTML = '<option value="">Select source...</option>';
+                        targetSelect.innerHTML = '<option value="">Select target...</option>';
+                        
+                        // Categorize dialogs by type
+                        const categories = {
+                            channels: [],
+                            bots: [],
+                            groups: [],
+                            users: []
+                        };
+                        
+                        data.dialogs.forEach(dialog => {
+                            if (dialog.type === 'channel') {
+                                categories.channels.push(dialog);
+                            } else if (dialog.type === 'bot') {
+                                categories.bots.push(dialog);
+                            } else if (dialog.type === 'group' || dialog.type === 'supergroup') {
+                                categories.groups.push(dialog);
+                            } else if (dialog.type === 'user') {
+                                categories.users.push(dialog);
+                            } else {
+                                // Fallback for unknown types
+                                categories.users.push(dialog);
+                            }
+                        });
+                        
+                        // Create organized dropdowns
+                        populateSelectWithCategories(sourceSelect, categories);
+                        populateSelectWithCategories(targetSelect, categories);
+                        
+                        console.log('Dropdowns populated with categorized chats');
+                    } else {
+                        console.error('Dropdown elements not found');
+                    }
+                } else {
+                    console.error('Failed to load dialogs:', data.message);
+                    alert('Unable to load chats. Make sure you are connected to Telegram.');
+                }
+            } catch (error) {
+                console.error('Error loading dialogs:', error);
+                alert('Error loading chats. Please try again.');
+            }
+        }
+        
+        // Populate select element with categorized options
+        function populateSelectWithCategories(selectElement, categories) {
+            // Add Channels
+            if (categories.channels.length > 0) {
+                const channelGroup = document.createElement('optgroup');
+                channelGroup.label = '📢 Channels (' + categories.channels.length + ')';
+                categories.channels.forEach(dialog => {
+                    const option = document.createElement('option');
+                    option.value = dialog.username || dialog.id;
+                    option.textContent = '📢 ' + (dialog.display_name || dialog.name);
+                    channelGroup.appendChild(option);
+                });
+                selectElement.appendChild(channelGroup);
+            }
+            
+            // Add Bots
+            if (categories.bots.length > 0) {
+                const botGroup = document.createElement('optgroup');
+                botGroup.label = '🤖 Bots (' + categories.bots.length + ')';
+                categories.bots.forEach(dialog => {
+                    const option = document.createElement('option');
+                    option.value = dialog.username || dialog.id;
+                    option.textContent = '🤖 ' + (dialog.display_name || dialog.name);
+                    botGroup.appendChild(option);
+                });
+                selectElement.appendChild(botGroup);
+            }
+            
+            // Add Groups
+            if (categories.groups.length > 0) {
+                const groupGroup = document.createElement('optgroup');
+                groupGroup.label = '👥 Groups (' + categories.groups.length + ')';
+                categories.groups.forEach(dialog => {
+                    const option = document.createElement('option');
+                    option.value = dialog.username || dialog.id;
+                    option.textContent = '👥 ' + (dialog.display_name || dialog.name);
+                    groupGroup.appendChild(option);
+                });
+                selectElement.appendChild(groupGroup);
+            }
+            
+            // Add Private Users
+            if (categories.users.length > 0) {
+                const userGroup = document.createElement('optgroup');
+                userGroup.label = '👤 Private Chats (' + categories.users.length + ')';
+                categories.users.forEach(dialog => {
+                    const option = document.createElement('option');
+                    option.value = dialog.username || dialog.id;
+                    option.textContent = '👤 ' + (dialog.display_name || dialog.name);
+                    userGroup.appendChild(option);
+                });
+                selectElement.appendChild(userGroup);
+            }
+        }
+        
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        }
+        
+        // Save Rule Function
+        async function saveRule() {
+            console.log('Saving rule...');
+            const form = document.getElementById('addRuleForm');
+            const formData = new FormData(form);
+            
+            const ruleData = {
+                source: document.getElementById('ruleSource').value,
+                target: document.getElementById('ruleTarget').value,
+                filters: document.getElementById('ruleKeywords').value,
+                enabled: true
+            };
+            
+            console.log('Rule data:', ruleData);
+            
+            if (!ruleData.source || !ruleData.target) {
+                alert('Please select both source and target chats');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ruleData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Rule created successfully!');
+                    closeModal('addRuleModal');
+                    // Reload the page to show the new rule
+                    window.location.reload();
+                } else {
+                    alert('Failed to create rule: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error saving rule:', error);
+                alert('Error creating rule. Please try again.');
+            }
+        }
+        
+        // Load and display forwarding rules
+        async function loadRules() {
+            console.log('Loading forwarding rules...');
+            try {
+                const response = await fetch('/api/rules');
+                const data = await response.json();
+                
+                const rulesContainer = document.getElementById('rulesContainer');
+                if (!rulesContainer) {
+                    console.error('Rules container not found');
+                    return;
+                }
+                
+                if (data.success && data.rules && data.rules.length > 0) {
+                    console.log('Rules loaded:', data.rules.length);
+                    
+                    let rulesHtml = '<div class="rules-grid">';
+                    
+                    data.rules.forEach(rule => {
+                        const statusClass = rule.enabled ? 'rule-active' : 'rule-inactive';
+                        const statusText = rule.enabled ? 'Active' : 'Inactive';
+                        const toggleText = rule.enabled ? 'Disable' : 'Enable';
+                        
+                        rulesHtml += `
+                            <div class="rule-card ${statusClass}">
+                                <div class="rule-header">
+                                    <div class="rule-status">
+                                        <span class="status-badge ${rule.enabled ? 'status-active' : 'status-inactive'}">
+                                            ${statusText}
+                                        </span>
+                                    </div>
+                                    <div class="rule-actions">
+                                        <button class="btn btn-sm btn-outline" onclick="toggleRule(${rule.id})">
+                                            ${toggleText}
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="deleteRule(${rule.id})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="rule-content">
+                                    <div class="rule-flow">
+                                        <div class="rule-source">
+                                            <i class="fas fa-arrow-right"></i>
+                                            <span class="rule-label">From:</span>
+                                            <span class="rule-value">${rule.source}</span>
+                                        </div>
+                                        <div class="rule-target">
+                                            <i class="fas fa-arrow-right"></i>
+                                            <span class="rule-label">To:</span>
+                                            <span class="rule-value">${rule.target}</span>
+                                        </div>
+                                    </div>
+                                    ${rule.filters ? `
+                                        <div class="rule-filters">
+                                            <i class="fas fa-filter"></i>
+                                            <span class="rule-label">Filters:</span>
+                                            <span class="rule-value">${rule.filters}</span>
+                                        </div>
+                                    ` : ''}
+                                    <div class="rule-stats">
+                                        <small class="text-muted">
+                                            Messages forwarded: ${rule.message_count || 0}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    rulesHtml += '</div>';
+                    rulesContainer.innerHTML = rulesHtml;
+                } else {
+                    rulesContainer.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-inbox fa-3x text-gray-400 mb-3"></i>
+                            <h4 class="text-gray-600">No forwarding rules</h4>
+                            <p class="text-gray-500">Create your first rule to start forwarding messages</p>
+                            <button class="btn btn-primary mt-3" onclick="showAddRuleModal()">
+                                <i class="fas fa-plus"></i> Add Rule
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading rules:', error);
+                const rulesContainer = document.getElementById('rulesContainer');
+                if (rulesContainer) {
+                    rulesContainer.innerHTML = `
+                        <div class="alert alert-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            Failed to load rules. Please try refreshing the page.
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        // Toggle rule status
+        async function toggleRule(ruleId) {
+            try {
+                const response = await fetch(`/api/rules/${ruleId}/toggle`, {
+                    method: 'PUT'
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    loadRules(); // Reload rules to show updated status
+                } else {
+                    alert('Failed to toggle rule: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error toggling rule:', error);
+                alert('Error toggling rule. Please try again.');
+            }
+        }
+        
+        // Delete rule
+        async function deleteRule(ruleId) {
+            if (confirm('Are you sure you want to delete this rule?')) {
+                try {
+                    const response = await fetch(`/api/rules/${ruleId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        loadRules(); // Reload rules
+                        alert('Rule deleted successfully!');
+                    } else {
+                        alert('Failed to delete rule: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error deleting rule:', error);
+                    alert('Error deleting rule. Please try again.');
+                }
+            }
+        }
+        
+        // Load and display activity feed
+        async function loadActivity() {
+            console.log('Loading activity feed...');
+            try {
+                const response = await fetch('/api/activity');
+                const data = await response.json();
+                
+                const activityFeed = document.getElementById('activityFeed');
+                if (!activityFeed) {
+                    console.error('Activity feed container not found');
+                    return;
+                }
+                
+                if (data.success && data.activity && data.activity.length > 0) {
+                    console.log('Activity loaded:', data.activity.length);
+                    
+                    let activityHtml = '<div class="activity-timeline">';
+                    
+                    data.activity.forEach(activity => {
+                        const timeAgo = getTimeAgo(activity.timestamp);
+                        const activityIcon = getActivityIcon(activity.activity_type);
+                        
+                        activityHtml += `
+                            <div class="activity-item">
+                                <div class="activity-icon ${activity.activity_type}">
+                                    <i class="fas ${activityIcon}"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-header">
+                                        <span class="activity-title">${activity.description}</span>
+                                        <span class="activity-time">${timeAgo}</span>
+                                    </div>
+                                    ${activity.source && activity.target ? `
+                                        <div class="activity-details">
+                                            <span class="activity-source">${activity.source}</span>
+                                            <i class="fas fa-arrow-right"></i>
+                                            <span class="activity-target">${activity.target}</span>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    activityHtml += '</div>';
+                    activityFeed.innerHTML = activityHtml;
+                } else {
+                    activityFeed.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-clock fa-3x text-gray-400 mb-3"></i>
+                            <h4 class="text-gray-600">No recent activity</h4>
+                            <p class="text-gray-500">Activity will appear here when messages are forwarded</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading activity:', error);
+                const activityFeed = document.getElementById('activityFeed');
+                if (activityFeed) {
+                    activityFeed.innerHTML = `
+                        <div class="alert alert-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            Failed to load activity. Please try refreshing the page.
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        // Load and display settings
+        async function loadSettings() {
+            console.log('Loading settings...');
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                
+                if (data.success && data.settings) {
+                    console.log('Settings loaded:', data.settings);
+                    
+                    // Populate settings form
+                    const settings = data.settings;
+                    document.getElementById('maxMessagesPerMinute').value = settings.max_messages_per_minute || 10;
+                    document.getElementById('maxDailyForwards').value = settings.max_daily_forwards || 100;
+                    document.getElementById('delayBetweenForwards').value = settings.delay_between_forwards || 3;
+                    document.getElementById('maxConsecutiveErrors').value = settings.max_consecutive_errors || 5;
+                    document.getElementById('cooldownHours').value = settings.cooldown_hours || 2;
+                } else {
+                    console.error('Failed to load settings:', data.message);
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+        
+        // Save settings
+        async function saveSettings() {
+            console.log('Saving settings...');
+            try {
+                const settingsData = {
+                    max_messages_per_minute: parseInt(document.getElementById('maxMessagesPerMinute').value),
+                    max_daily_forwards: parseInt(document.getElementById('maxDailyForwards').value),
+                    delay_between_forwards: parseInt(document.getElementById('delayBetweenForwards').value),
+                    max_consecutive_errors: parseInt(document.getElementById('maxConsecutiveErrors').value),
+                    cooldown_hours: parseInt(document.getElementById('cooldownHours').value)
+                };
+                
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settingsData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Failed to save settings: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('Error saving settings. Please try again.');
+            }
+        }
+        
+        // Reset settings to defaults
+        function resetSettings() {
+            if (confirm('Are you sure you want to reset all settings to defaults?')) {
+                document.getElementById('maxMessagesPerMinute').value = 10;
+                document.getElementById('maxDailyForwards').value = 100;
+                document.getElementById('delayBetweenForwards').value = 3;
+                document.getElementById('maxConsecutiveErrors').value = 5;
+                document.getElementById('cooldownHours').value = 2;
+            }
+        }
+        
+        // Helper functions
+        function getTimeAgo(timestamp) {
+            const now = new Date();
+            const time = new Date(timestamp);
+            const diffMs = now - time;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            return `${diffDays}d ago`;
+        }
+        
+        function getActivityIcon(activityType) {
+            const icons = {
+                'message_forwarded': 'fa-arrow-right',
+                'rule_created': 'fa-plus',
+                'rule_enabled': 'fa-play',
+                'rule_disabled': 'fa-pause',
+                'rule_deleted': 'fa-trash',
+                'forwarding_started': 'fa-play-circle',
+                'forwarding_stopped': 'fa-stop-circle',
+                'error': 'fa-exclamation-triangle'
+            };
+            return icons[activityType] || 'fa-info-circle';
+        }
+        
+        // Setup navigation handling
+        function setupNavigation() {
+            // Handle navigation clicks
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetSection = this.getAttribute('href').substring(1);
+                    showSection(targetSection);
+                });
+            });
+            
+            // Handle hash changes for direct URL access
+            window.addEventListener('hashchange', function() {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    showSection(hash);
+                }
+            });
+            
+            // Load initial section based on hash or default to dashboard
+            const initialSection = window.location.hash.substring(1) || 'dashboard';
+            showSection(initialSection);
+        }
+        
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.page-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            
+            // Remove active class from all nav links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            // Show target section
+            const targetSection = document.getElementById(sectionName);
+            if (targetSection) {
+                targetSection.style.display = 'block';
+                
+                // Add active class to corresponding nav link
+                const navLink = document.querySelector(`[href="#${sectionName}"]`);
+                if (navLink) {
+                    navLink.classList.add('active');
+                }
+                
+                // Load section-specific data
+                loadSectionData(sectionName);
+                
+                // Update URL hash
+                window.history.replaceState(null, null, `#${sectionName}`);
+            }
+        }
+        
+        function loadSectionData(sectionName) {
+            switch(sectionName) {
+                case 'activity':
+                    loadActivity();
+                    break;
+                case 'settings':
+                    loadSettings();
+                    break;
+                case 'forwarding-rules':
+                    loadRules();
+                    break;
+                // dashboard loads automatically
+            }
+        }
+        
+        // Refresh Telegram connection status
+        async function refreshTelegramStatus() {
+            console.log('Refreshing Telegram status...');
+            const refreshBtn = document.querySelector('button[onclick="refreshTelegramStatus()"]');
+            const statusContainer = document.getElementById('telegramStatus');
+            
+            if (refreshBtn) {
+                // Show loading state
+                const originalHtml = refreshBtn.innerHTML;
+                refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> CHECKING...';
+                refreshBtn.disabled = true;
+            }
+            
+            try {
+                const response = await fetch('/api/telegram-status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('Telegram status:', data.status);
+                    updateTelegramStatusUI(data.status);
+                } else {
+                    console.error('Failed to get Telegram status:', data.message);
+                    alert('Failed to check status: ' + data.message);
+                }
+            } catch (error) {
+                console.error('Error checking Telegram status:', error);
+                alert('Error checking Telegram status. Please try again.');
+            } finally {
+                // Restore button
+                if (refreshBtn) {
+                    setTimeout(() => {
+                        refreshBtn.innerHTML = '<i class="fas fa-sync"></i> REFRESH STATUS';
+                        refreshBtn.disabled = false;
+                    }, 1000);
+                }
+            }
+        }
+        
+        // Update Telegram status UI
+        function updateTelegramStatusUI(status) {
+            const statusContainer = document.getElementById('telegramStatus');
+            if (!statusContainer) {
+                console.error('telegramStatus container not found');
+                return;
+            }
+            
+            console.log('Updating UI with status:', status);
+            
+            // Update sidebar navigation badge
+            const sidebarBadge = document.querySelector('.telegram-status.badge');
+            if (sidebarBadge) {
+                if (status.is_authenticated && status.phone) {
+                    sidebarBadge.textContent = 'Connected';
+                    sidebarBadge.className = 'telegram-status badge badge-success';
+                } else {
+                    sidebarBadge.textContent = 'Not Connected';
+                    sidebarBadge.className = 'telegram-status badge badge-warning';
+                }
+            }
+            
+            if (status.is_authenticated && status.phone) {
+                // Connected state
+                statusContainer.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i>
+                        <strong>Connected to Telegram</strong><br>
+                        <small>Phone: ${status.phone}</small>
+                    </div>
+                    <div class="telegram-actions">
+                        <button class="btn btn-outline" onclick="refreshTelegramStatus()">
+                            <i class="fas fa-sync"></i> REFRESH STATUS
+                        </button>
+                        <button class="btn btn-danger" onclick="disconnectTelegram()">
+                            <i class="fas fa-unlink"></i> DISCONNECT
+                        </button>
+                    </div>
+                `;
+            } else {
+                // Disconnected state - Enable connect functionality
+                statusContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Not Connected</strong><br>
+                        <small>Connect your Telegram account to start forwarding</small>
+                    </div>
+                    <div class="telegram-actions">
+                        <button class="btn btn-outline" onclick="refreshTelegramStatus()">
+                            <i class="fas fa-sync"></i> CHECK STATUS
+                        </button>
+                        <button class="btn btn-primary" onclick="showTelegramAuthForm()">
+                            <i class="fas fa-link"></i> CONNECT
+                        </button>
+                    </div>
+                    
+                    <!-- Telegram Authentication Form (Hidden by default) -->
+                    <div id="telegramAuthForm" style="display: none; margin-top: 2rem;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title">Connect to Telegram</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="authForm" onsubmit="handleTelegramAuth(event)">
+                                    <div class="form-group">
+                                        <label for="phoneNumber">Phone Number</label>
+                                        <input type="tel" id="phoneNumber" class="form-input" 
+                                               placeholder="Enter your phone number (e.g., +1234567890)" 
+                                               required>
+                                        <small class="form-help">Include country code (e.g., +91 for India)</small>
+                                    </div>
+                                    
+                                    <div id="codeStep" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="authCode">Verification Code</label>
+                                            <input type="text" id="authCode" class="form-input" 
+                                                   placeholder="Enter the code from Telegram">
+                                        </div>
+                                    </div>
+                                    
+                                    <div id="passwordStep" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="twoFactorPassword">2FA Password</label>
+                                            <input type="password" id="twoFactorPassword" class="form-input" 
+                                                   placeholder="Enter your 2FA password">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-primary" id="authSubmitBtn">
+                                            <i class="fas fa-paper-plane"></i> Send Code
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" onclick="hideTelegramAuthForm()">
+                                            <i class="fas fa-times"></i> Cancel
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Disconnect from Telegram
+        async function disconnectTelegram() {
+            if (confirm('Are you sure you want to disconnect from Telegram? This will stop all forwarding.')) {
+                try {
+                    const response = await fetch('/api/telegram-disconnect', {
+                        method: 'POST'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('Successfully disconnected from Telegram');
+                        // Refresh the status to show disconnected state
+                        await refreshTelegramStatus();
+                    } else {
+                        alert('Failed to disconnect: ' + result.message);
+                    }
+                } catch (error) {
+                    console.error('Error disconnecting:', error);
+                    alert('Error disconnecting from Telegram. Please try again.');
+                }
+            }
+        }
+        
+        // Show Telegram authentication form
+        function showTelegramAuthForm() {
+            const authForm = document.getElementById('telegramAuthForm');
+            if (authForm) {
+                authForm.style.display = 'block';
+                // Hide the connect button to avoid confusion
+                const connectBtn = document.querySelector('button[onclick="showTelegramAuthForm()"]');
+                if (connectBtn) {
+                    connectBtn.style.display = 'none';
+                }
+            }
+        }
+        
+        // Hide Telegram authentication form
+        function hideTelegramAuthForm() {
+            const authForm = document.getElementById('telegramAuthForm');
+            if (authForm) {
+                authForm.style.display = 'none';
+                // Show the connect button again
+                const connectBtn = document.querySelector('button[onclick="showTelegramAuthForm()"]');
+                if (connectBtn) {
+                    connectBtn.style.display = 'inline-block';
+                }
+                // Reset form
+                document.getElementById('authForm').reset();
+                document.getElementById('codeStep').style.display = 'none';
+                document.getElementById('passwordStep').style.display = 'none';
+                document.getElementById('authSubmitBtn').innerHTML = '<i class="fas fa-paper-plane"></i> Send Code';
+            }
+        }
+        
+        // Handle Telegram authentication
+        async function handleTelegramAuth(event) {
+            event.preventDefault();
+            
+            const submitBtn = document.getElementById('authSubmitBtn');
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            const authCode = document.getElementById('authCode').value;
+            const twoFactorPassword = document.getElementById('twoFactorPassword').value;
+            
+            // Disable button during processing
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            submitBtn.disabled = true;
+            
+            try {
+                if (!authCode && !twoFactorPassword) {
+                    // Step 1: Send code
+                    const response = await fetch('/api/auth/send-code', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone_number: phoneNumber })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Show code input step
+                        document.getElementById('codeStep').style.display = 'block';
+                        document.getElementById('authSubmitBtn').innerHTML = '<i class="fas fa-check"></i> Verify Code';
+                        alert('Verification code sent! Check your Telegram app.');
+                    } else {
+                        alert('Failed to send code: ' + result.message);
+                    }
+                } else if (authCode && !twoFactorPassword) {
+                    // Step 2: Verify code
+                    const response = await fetch('/api/auth/verify-code', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            phone_number: phoneNumber,
+                            code: authCode 
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('Successfully connected to Telegram!');
+                        hideTelegramAuthForm();
+                        await refreshTelegramStatus();
+                        // Reload page to show connected state
+                        window.location.reload();
+                    } else if (result.requires_password) {
+                        // Show password step for 2FA
+                        document.getElementById('passwordStep').style.display = 'block';
+                        document.getElementById('authSubmitBtn').innerHTML = '<i class="fas fa-unlock"></i> Verify Password';
+                        alert('2FA enabled. Please enter your password.');
+                    } else {
+                        alert('Failed to verify code: ' + result.message);
+                    }
+                } else if (twoFactorPassword) {
+                    // Step 3: Verify 2FA password
+                    const response = await fetch('/api/auth/verify-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: twoFactorPassword })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('Successfully connected to Telegram!');
+                        hideTelegramAuthForm();
+                        await refreshTelegramStatus();
+                        // Reload page to show connected state
+                        window.location.reload();
+                    } else {
+                        alert('Failed to verify password: ' + result.message);
+                    }
+                }
+            } catch (error) {
+                console.error('Error during authentication:', error);
+                alert('Error during authentication. Please try again.');
+            } finally {
+                // Restore button
+                submitBtn.innerHTML = originalBtnText;
+                submitBtn.disabled = false;
+            }
+        }
+        
+        // Initialize after DOM loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing...');
+            
+            // Load rules when page loads
+            loadRules();
+            
+            // Set up navigation handling
+            setupNavigation();
+            
+            // Handle initial section from URL hash
+            const initialSection = window.location.hash.substring(1) || 'dashboard';
+            console.log('Initial section:', initialSection);
+            showSection(initialSection);
+            
+            // Auto-refresh Telegram status on page load
+            setTimeout(() => {
+                console.log('Auto-refreshing Telegram status...');
+                refreshTelegramStatus();
+            }, 1000);
+            
+            const addBtn = document.getElementById('addRuleBtn');
+            if (addBtn) {
+                console.log('Add rule button found');
+            } else {
+                console.error('Add rule button NOT found!');
+            }
+            
+            const modal = document.getElementById('addRuleModal');
+            if (modal) {
+                console.log('Add rule modal found');
+            } else {
+                console.error('Add rule modal NOT found!');
+            }
+            
+            // Add click handler for save button
+            const saveBtn = document.getElementById('saveRuleBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveRule);
+                console.log('Save button handler added');
+            }
+        });
+    </script>
+    
+    <!-- Custom Styles -->
+    <style>
+        .notification-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+        }
+        
+        .notification {
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            min-width: 300px;
+        }
+        
+        .notification-success { border-left: 4px solid var(--success); }
+        .notification-error { border-left: 4px solid var(--danger); }
+        .notification-info { border-left: 4px solid var(--info); }
+        
+        .fade-in {
+            animation: slideInRight 0.3s ease;
+        }
+        
+        .fade-out {
+            animation: slideOutRight 0.3s ease;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+        
+        .activity-feed {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .activity-item {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .activity-icon.forwarded {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+        
+        .activity-icon.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+        
+        .activity-content {
+            flex: 1;
+        }
+        
+        .activity-title {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+        
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--gray-500);
+        }
+        
+        .rule-card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+            transition: all 0.2s;
+        }
+        
+        .rule-card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .rule-card.inactive {
+            opacity: 0.6;
+        }
+        
+        .rule-card-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .rule-card-body {
+            padding: 1rem 1.25rem;
+        }
+        
+        .rule-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .rule-meta {
+            margin-top: 0.5rem;
+        }
+        
+        .rule-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .rule-filters {
+            margin-bottom: 0.5rem;
+        }
+        
+        .filter-label {
+            font-size: 0.875rem;
+            color: var(--gray-600);
+            margin-right: 0.5rem;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+        }
+        
+        .connection-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--gray-400);
+            transition: all 0.3s;
+        }
+        
+        .connection-indicator.connected {
+            background: var(--success);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+        }
+        
+        .connection-indicator.disconnected {
+            background: var(--danger);
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+        }
+        
+        .forwarding-status-icon.active {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex !important;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-dialog {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+            animation: slideUp 0.3s ease;
+        }
+        
+        .modal-header {
+            padding: 1.5rem 1.5rem 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .modal-close {
+            background: transparent;
+            border: none;
+            font-size: 1.5rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0;
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+        
+        .modal-close:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 1rem 1.5rem 1.5rem 1.5rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+        
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Optgroup Styling for Categorized Dropdowns */
+        .form-select optgroup {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #374151;
+            background-color: #f9fafb;
+            padding: 0.25rem 0;
+            margin: 0.25rem 0;
+        }
+        
+        .form-select optgroup option {
+            font-weight: 400;
+            padding-left: 1rem;
+            color: #1f2937;
+            background-color: white;
+        }
+        
+        .form-select optgroup option:hover {
+            background-color: #f3f4f6;
+        }
+        
+        .form-select {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        /* Rule Cards Styling */
+        .rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+        
+        .rule-card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+        
+        .rule-card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-color: #0088cc;
+        }
+        
+        .rule-card.rule-active {
+            border-left: 4px solid #10b981;
+        }
+        
+        .rule-card.rule-inactive {
+            border-left: 4px solid #ef4444;
+            opacity: 0.8;
+        }
+        
+        .rule-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .rule-status {
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-active {
+            background: rgba(16, 185, 129, 0.1);
+            color: #059669;
+        }
+        
+        .status-inactive {
+            background: rgba(239, 68, 68, 0.1);
+            color: #dc2626;
+        }
+        
+        .rule-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .rule-content {
+            padding: 1.5rem;
+        }
+        
+        .rule-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .rule-source,
+        .rule-target,
+        .rule-filters {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .rule-source i,
+        .rule-target i,
+        .rule-filters i {
+            color: #6b7280;
+            width: 1rem;
+        }
+        
+        .rule-label {
+            font-weight: 500;
+            color: #374151;
+            min-width: 4rem;
+        }
+        
+        .rule-value {
+            color: #1f2937;
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #f9fafb;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .rule-stats {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #f3f4f6;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+        }
+        
+        /* Activity Timeline Styles */
+        .activity-timeline {
+            position: relative;
+        }
+        
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+        
+        .activity-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 1rem;
+            top: 2.5rem;
+            width: 2px;
+            height: calc(100% + 0.5rem);
+            background: #e5e7eb;
+        }
+        
+        .activity-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            flex-shrink: 0;
+            color: white;
+            font-size: 0.75rem;
+        }
+        
+        .activity-icon.message_forwarded { background: #10b981; }
+        .activity-icon.rule_created { background: #3b82f6; }
+        .activity-icon.rule_enabled { background: #059669; }
+        .activity-icon.rule_disabled { background: #f59e0b; }
+        .activity-icon.rule_deleted { background: #ef4444; }
+        .activity-icon.forwarding_started { background: #8b5cf6; }
+        .activity-icon.forwarding_stopped { background: #6b7280; }
+        .activity-icon.error { background: #dc2626; }
+        
+        .activity-content {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .activity-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+        }
+        
+        .activity-title {
+            font-weight: 500;
+            color: #1f2937;
+        }
+        
+        .activity-time {
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        
+        .activity-details {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: #4b5563;
+        }
+        
+        .activity-source,
+        .activity-target {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #f3f4f6;
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.25rem;
+            border: 1px solid #e5e7eb;
+        }
+        
+        /* Telegram Status Styles */
+        .telegram-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .telegram-actions button {
+            flex: 1;
+            min-width: 140px;
+        }
+        
+        .alert-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .alert-error i {
+            color: #dc2626;
+        }
+        
+        /* Telegram Auth Form Styles */
+        #telegramAuthForm {
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .form-help {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+        }
+        
+        .form-actions button {
+            flex: 1;
+        }
+        
+        /* Navigation Badge Styles */
+        .telegram-status.badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            transition: all 0.3s ease;
+        }
+        
+        .badge-success {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .badge-warning {
+            background-color: #f59e0b;
+            color: white;
+        }
+        
+        .badge-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+    </style>
+    
+    <!-- Modern App JavaScript -->
+    <script src="{{ url_for('static', filename='js/modern-app.js') }}"></script>
+</body>
+</html>
