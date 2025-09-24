@@ -807,50 +807,85 @@ class SimpleTelegramClient:
                             media_bytes = await self.client.download_media(message, file=bytes)
                             
                             if media_bytes:
-                                # Check media type and send appropriately
+                                # Determine media type and send with correct parameters
                                 if hasattr(message.media, 'photo'):
-                                    # Photo - send as photo to maintain preview
+                                    # Photo message - send with photo attributes
+                                    from telethon.tl.types import DocumentAttributeFilename
+                                    import io
+                                    
+                                    # Create a proper photo file object
+                                    photo_file = io.BytesIO(media_bytes)
+                                    photo_file.name = f"photo_{message.id}.jpg"
+                                    
                                     await self.client.send_file(
                                         target_entity,
-                                        media_bytes,
-                                        caption=message.text or ""
+                                        photo_file,
+                                        caption=message.text or "",
+                                        force_document=False,  # Ensure it's sent as photo
+                                        allow_cache=False
                                     )
                                     self.logger.debug("Successfully sent photo from protected chat")
                                     
                                 elif hasattr(message.media, 'document'):
-                                    # Video/Document - check MIME type
-                                    mime_type = getattr(message.media.document, 'mime_type', '')
+                                    # Document/Video/Image - check MIME type and attributes
+                                    doc = message.media.document
+                                    mime_type = getattr(doc, 'mime_type', '').lower()
                                     
-                                    if 'video' in mime_type.lower() or 'image' in mime_type.lower():
-                                        # Video or image document - send without forcing as document
+                                    # Get original filename from attributes
+                                    filename = None
+                                    if hasattr(doc, 'attributes'):
+                                        for attr in doc.attributes:
+                                            if hasattr(attr, 'file_name') and attr.file_name:
+                                                filename = attr.file_name
+                                                break
+                                    
+                                    if 'image' in mime_type:
+                                        # Image document - send as photo for preview
+                                        import io
+                                        
+                                        # Create proper image file object  
+                                        img_file = io.BytesIO(media_bytes)
+                                        img_file.name = filename or f"image_{message.id}.jpg"
+                                        
                                         await self.client.send_file(
                                             target_entity,
-                                            media_bytes,
-                                            caption=message.text or ""
+                                            img_file,
+                                            caption=message.text or "",
+                                            force_document=False,  # Send as photo/image
+                                            allow_cache=False
                                         )
-                                    else:
-                                        # Regular document - get original filename
-                                        filename = None
-                                        if hasattr(message.media.document, 'attributes'):
-                                            for attr in message.media.document.attributes:
-                                                if hasattr(attr, 'file_name') and attr.file_name:
-                                                    filename = attr.file_name
-                                                    break
+                                        self.logger.debug("Successfully sent image as photo from protected chat")
                                         
+                                    elif 'video' in mime_type:
+                                        # Video - send as video with proper attributes
                                         await self.client.send_file(
                                             target_entity,
                                             media_bytes,
                                             caption=message.text or "",
-                                            file_name=filename
+                                            force_document=False,  # Keep as video
+                                            file_name=filename,
+                                            supports_streaming=True
                                         )
-                                    self.logger.debug("Successfully sent document from protected chat")
+                                        self.logger.debug("Successfully sent video from protected chat")
+                                        
+                                    else:
+                                        # Regular document - preserve as document with filename
+                                        await self.client.send_file(
+                                            target_entity,
+                                            media_bytes,
+                                            caption=message.text or "",
+                                            file_name=filename or f"document_{message.id}",
+                                            force_document=True  # Keep as document
+                                        )
+                                        self.logger.debug("Successfully sent document from protected chat")
                                     
                                 else:
-                                    # Other media types
+                                    # Other media types - let Telegram auto-detect
                                     await self.client.send_file(
                                         target_entity,
                                         media_bytes,
-                                        caption=message.text or ""
+                                        caption=message.text or "",
+                                        force_document=False  # Auto-detect format
                                     )
                                     self.logger.debug("Successfully sent media from protected chat")
                                 
