@@ -786,37 +786,93 @@ class SimpleTelegramClient:
                     await self.client.send_message(target_entity, location_text)
                     success = True
                 
-                # Handle media messages - SIMPLE APPROACH
+                # Handle media messages - PROPER MEDIA FORWARDING
                 elif message.media:
                     try:
-                        # Simple media copying that works for all cases
+                        # First attempt: Direct media forwarding (works for non-protected chats)
                         await self.client.send_file(
                             target_entity,
                             message.media,
                             caption=message.text or ""
                         )
-                        self.logger.debug("Successfully copied media")
+                        self.logger.debug("Successfully forwarded media directly")
                         success = True
                         
-                    except Exception as media_error:
-                        self.logger.warning(f"Direct media copy failed: {media_error}")
+                    except Exception as direct_error:
+                        # If direct forwarding fails (protected chat), download and re-upload
+                        self.logger.debug(f"Direct forwarding failed, downloading media: {direct_error}")
                         
-                        # Fallback: Try to send as text with media info
                         try:
+                            # Download media to bytes in memory
+                            media_bytes = await self.client.download_media(message, file=bytes)
+                            
+                            if media_bytes:
+                                # Check media type and send appropriately
+                                if hasattr(message.media, 'photo'):
+                                    # Photo - send as photo to maintain preview
+                                    await self.client.send_file(
+                                        target_entity,
+                                        media_bytes,
+                                        caption=message.text or ""
+                                    )
+                                    self.logger.debug("Successfully sent photo from protected chat")
+                                    
+                                elif hasattr(message.media, 'document'):
+                                    # Video/Document - check MIME type
+                                    mime_type = getattr(message.media.document, 'mime_type', '')
+                                    
+                                    if 'video' in mime_type.lower() or 'image' in mime_type.lower():
+                                        # Video or image document - send without forcing as document
+                                        await self.client.send_file(
+                                            target_entity,
+                                            media_bytes,
+                                            caption=message.text or ""
+                                        )
+                                    else:
+                                        # Regular document - get original filename
+                                        filename = None
+                                        if hasattr(message.media.document, 'attributes'):
+                                            for attr in message.media.document.attributes:
+                                                if hasattr(attr, 'file_name') and attr.file_name:
+                                                    filename = attr.file_name
+                                                    break
+                                        
+                                        await self.client.send_file(
+                                            target_entity,
+                                            media_bytes,
+                                            caption=message.text or "",
+                                            file_name=filename
+                                        )
+                                    self.logger.debug("Successfully sent document from protected chat")
+                                    
+                                else:
+                                    # Other media types
+                                    await self.client.send_file(
+                                        target_entity,
+                                        media_bytes,
+                                        caption=message.text or ""
+                                    )
+                                    self.logger.debug("Successfully sent media from protected chat")
+                                
+                                success = True
+                            else:
+                                raise Exception("Failed to download media")
+                                
+                        except Exception as download_error:
+                            self.logger.warning(f"Media download/upload failed: {download_error}")
+                            
+                            # Final fallback: Send text with media indicator
                             if message.text:
                                 await self.client.send_message(
                                     target_entity, 
-                                    f"📎 [Media] {message.text}"
+                                    f"📎 [Media couldn't be copied]\n{message.text}"
                                 )
                             else:
                                 await self.client.send_message(
                                     target_entity, 
-                                    "📎 [Media content]"
+                                    "📎 [Media from protected chat - couldn't be copied]"
                                 )
                             success = True
-                        except Exception as fallback_error:
-                            self.logger.error(f"Fallback also failed: {fallback_error}")
-                            success = False
                 
                 # Handle text-only messages (if not handled above)
                 if not success:
