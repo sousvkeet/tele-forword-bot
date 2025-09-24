@@ -69,14 +69,18 @@ def initialize_client_on_startup():
                 enabled_rules = db_manager.get_enabled_rules()
                 if enabled_rules:
                     app.logger.info(f"Loading {len(enabled_rules)} enabled rules on startup")
-                    # Clear existing rules first
+                    # Clear existing rules first to avoid duplicates
                     telegram_client.forwarding_rules = []
                     
-                    # Add all enabled rules to client
+                    # Add all enabled rules to client with proper IDs
                     for rule in enabled_rules:
-                        async_helper.run_async_safe(telegram_client.add_forwarding_rule(
+                        result = async_helper.run_async_safe(telegram_client.add_forwarding_rule(
                             rule['source'], rule['target'], rule['filters'], rule['id']
                         ))
+                        if result and result.get('success'):
+                            app.logger.info(f"Loaded rule: {rule['source']} -> {rule['target']} (ID: {rule['id']})")
+                        else:
+                            app.logger.error(f"Failed to load rule: {rule['source']} -> {rule['target']}")
                     
                     # Start forwarding if we have enabled rules
                     async_helper.run_async_safe(telegram_client.start_forwarding())
@@ -693,6 +697,18 @@ def get_dashboard_stats_api():
             if stats_result and stats_result.get('success'):
                 telegram_stats = stats_result.get('stats', {})
         
+        # Add debug info about loaded rules in telegram client
+        loaded_rules_debug = []
+        if telegram_client:
+            for rule in telegram_client.forwarding_rules:
+                loaded_rules_debug.append({
+                    'id': rule.get('db_id', rule.get('id')),
+                    'source': rule['source'],
+                    'target': rule['target'],
+                    'enabled': rule.get('enabled', True),
+                    'message_count': rule.get('message_count', 0)
+                })
+        
         stats = {
             'total_rules': total_rules,
             'active_rules': active_rules,
@@ -700,7 +716,9 @@ def get_dashboard_stats_api():
             'is_authenticated': telegram_client.is_authenticated if telegram_client else False,
             'is_forwarding': telegram_client.is_running if telegram_client else False,
             'daily_forwards': telegram_stats.get('daily_forwards', 0),
-            'max_daily_forwards': telegram_stats.get('max_daily_forwards', 100)
+            'max_daily_forwards': telegram_stats.get('max_daily_forwards', 100),
+            'loaded_rules_count': len(telegram_client.forwarding_rules) if telegram_client else 0,
+            'loaded_rules_debug': loaded_rules_debug
         }
         
         return jsonify({'success': True, 'stats': stats})

@@ -465,12 +465,16 @@ class SimpleTelegramClient:
         # Check if rule already exists to avoid duplicates
         existing_rule = None
         for rule in self.forwarding_rules:
-            if rule.get('db_id') == db_id or (rule['source'] == source and rule['target'] == target):
+            # Check by database ID first, then by source+target combination
+            if (db_id and rule.get('db_id') == db_id) or (rule['source'] == source and rule['target'] == target):
                 existing_rule = rule
                 break
         
         if existing_rule:
-            self.logger.info(f"Rule already exists: {source} -> {target}")
+            # Update existing rule instead of creating duplicate
+            existing_rule['filters'] = filters or {}
+            existing_rule['db_id'] = db_id  # Update database ID if provided
+            self.logger.info(f"Updated existing rule: {source} -> {target}")
             return {'success': True, 'rule': existing_rule}
         
         rule = {
@@ -480,12 +484,12 @@ class SimpleTelegramClient:
             'target': target,
             'filters': filters or {},
             'enabled': True,
-            'created_at': datetime.now().isoformat(),
+            'created_at': datetime.now(),
             'message_count': 0
         }
         
         self.forwarding_rules.append(rule)
-        self.logger.info(f"Added forwarding rule: {source} -> {target}")
+        self.logger.info(f"Added forwarding rule: {source} -> {target} (Total rules: {len(self.forwarding_rules)})")
         return {'success': True, 'rule': rule}
 
     async def remove_forwarding_rule(self, rule_id):
@@ -620,15 +624,28 @@ class SimpleTelegramClient:
             
             # Find matching forwarding rules
             forwarded_count = 0
-            for rule in self.forwarding_rules:
+            total_rules = len(self.forwarding_rules)
+            self.logger.debug(f"Processing message {message.id} against {total_rules} rules")
+            
+            for i, rule in enumerate(self.forwarding_rules):
+                self.logger.debug(f"Checking rule {i+1}/{total_rules}: {rule['source']} -> {rule['target']}")
+                
                 # All rules in client are enabled by design
                 if await self._matches_rule(message, source_id, rule):
+                    self.logger.debug(f"Rule {i+1} matched! Forwarding message...")
                     success = await self._forward_message(message, rule, worker_name)
                     if success:
                         forwarded_count += 1
+                        self.logger.info(f"Successfully forwarded via rule {i+1}: {rule['source']} -> {rule['target']}")
+                    else:
+                        self.logger.warning(f"Failed to forward via rule {i+1}: {rule['source']} -> {rule['target']}")
+                else:
+                    self.logger.debug(f"Rule {i+1} did not match")
             
             if forwarded_count > 0:
                 self.logger.info(f"{worker_name}: Forwarded message {message.id} to {forwarded_count} targets")
+            else:
+                self.logger.debug(f"{worker_name}: No rules matched for message {message.id}")
                     
         except Exception as e:
             self.logger.error(f"{worker_name}: Error processing message: {e}")
