@@ -794,13 +794,56 @@ class SimpleTelegramClient:
                         media_bytes = await self.client.download_media(message, file=bytes)
                         
                         if media_bytes:
-                            # Re-upload the downloaded media
-                            await self.client.send_file(
-                                target_entity,
-                                media_bytes,
-                                caption=message.text or "",
-                                file_name=self._get_media_filename(message)
-                            )
+                            # Get proper filename and attributes
+                            filename = self._get_media_filename(message)
+                            
+                            # Handle different media types properly
+                            if hasattr(message.media, 'photo'):
+                                # Photo - send as photo (not document) to maintain preview
+                                await self.client.send_file(
+                                    target_entity,
+                                    media_bytes,
+                                    caption=message.text or "",
+                                    force_document=False  # Ensure it's sent as photo
+                                )
+                            elif hasattr(message.media, 'document'):
+                                # Document/Video/Audio - check MIME type
+                                mime_type = getattr(message.media.document, 'mime_type', '')
+                                
+                                if 'image' in mime_type:
+                                    # Image document - send as photo for preview
+                                    await self.client.send_file(
+                                        target_entity,
+                                        media_bytes,
+                                        caption=message.text or "",
+                                        force_document=False
+                                    )
+                                elif 'video' in mime_type:
+                                    # Video - send as video with thumbnail
+                                    await self.client.send_file(
+                                        target_entity,
+                                        media_bytes,
+                                        caption=message.text or "",
+                                        force_document=False,
+                                        file_name=filename
+                                    )
+                                else:
+                                    # Other documents - preserve original filename
+                                    await self.client.send_file(
+                                        target_entity,
+                                        media_bytes,
+                                        caption=message.text or "",
+                                        file_name=filename,
+                                        force_document=True  # Keep as document
+                                    )
+                            else:
+                                # Generic media - let Telegram decide format
+                                await self.client.send_file(
+                                    target_entity,
+                                    media_bytes,
+                                    caption=message.text or "",
+                                    force_document=False
+                                )
                             self.logger.debug("Successfully copied media from protected chat")
                             success = True
                         else:
@@ -919,33 +962,62 @@ class SimpleTelegramClient:
         """Get appropriate filename for media based on message type"""
         try:
             if message.media and hasattr(message.media, 'document') and message.media.document:
-                # Document with filename
+                # Document with filename - check attributes
                 for attr in message.media.document.attributes:
                     if hasattr(attr, 'file_name') and attr.file_name:
                         return attr.file_name
                 
-                # Generate filename based on document type
+                # Generate descriptive filename based on document type
                 mime_type = getattr(message.media.document, 'mime_type', '')
+                timestamp = int(message.date.timestamp())
+                
                 if 'image' in mime_type:
-                    return f"image_{message.id}.jpg"
+                    if 'jpeg' in mime_type or 'jpg' in mime_type:
+                        return f"Image_{timestamp}.jpg"
+                    elif 'png' in mime_type:
+                        return f"Image_{timestamp}.png"
+                    elif 'gif' in mime_type:
+                        return f"Animation_{timestamp}.gif"
+                    else:
+                        return f"Image_{timestamp}.jpg"
+                        
                 elif 'video' in mime_type:
-                    return f"video_{message.id}.mp4"
+                    if 'mp4' in mime_type:
+                        return f"Video_{timestamp}.mp4"
+                    elif 'webm' in mime_type:
+                        return f"Video_{timestamp}.webm"
+                    else:
+                        return f"Video_{timestamp}.mp4"
+                        
                 elif 'audio' in mime_type:
-                    return f"audio_{message.id}.mp3"
+                    if 'mpeg' in mime_type or 'mp3' in mime_type:
+                        return f"Audio_{timestamp}.mp3"
+                    elif 'ogg' in mime_type:
+                        return f"Voice_{timestamp}.ogg"
+                    else:
+                        return f"Audio_{timestamp}.mp3"
+                        
+                elif 'application/pdf' in mime_type:
+                    return f"Document_{timestamp}.pdf"
+                elif 'text' in mime_type:
+                    return f"TextFile_{timestamp}.txt"
                 else:
-                    return f"file_{message.id}"
+                    # Generic document
+                    return f"Document_{timestamp}"
             
             elif message.media and hasattr(message.media, 'photo'):
-                # Photo
-                return f"photo_{message.id}.jpg"
+                # Photo - use timestamp for uniqueness
+                timestamp = int(message.date.timestamp())
+                return f"Photo_{timestamp}.jpg"
             
             else:
                 # Unknown media type
-                return f"media_{message.id}"
+                timestamp = int(message.date.timestamp())
+                return f"Media_{timestamp}"
                 
         except Exception as e:
             self.logger.debug(f"Error getting filename: {e}")
-            return f"media_{message.id}"
+            return f"Media_{message.id if hasattr(message, 'id') else 'unknown'}"
 
     def _should_skip_due_to_errors(self):
         """Check if we should skip processing due to error cooldown"""
