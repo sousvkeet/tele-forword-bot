@@ -786,135 +786,37 @@ class SimpleTelegramClient:
                     await self.client.send_message(target_entity, location_text)
                     success = True
                 
-                # Handle media messages
+                # Handle media messages - SIMPLE APPROACH
                 elif message.media:
                     try:
-                        # First try direct media copying (works for non-protected chats)
+                        # Simple media copying that works for all cases
+                        await self.client.send_file(
+                            target_entity,
+                            message.media,
+                            caption=message.text or ""
+                        )
+                        self.logger.debug("Successfully copied media")
+                        success = True
+                        
+                    except Exception as media_error:
+                        self.logger.warning(f"Direct media copy failed: {media_error}")
+                        
+                        # Fallback: Try to send as text with media info
                         try:
-                            if hasattr(message.media, 'photo'):
-                                # Photo message - copy directly
-                                await self.client.send_file(
-                                    target_entity,
-                                    message.media,
-                                    caption=message.text or ""
-                                )
-                            elif hasattr(message.media, 'document'):
-                                # Document/Video/Audio - copy directly
-                                await self.client.send_file(
-                                    target_entity,
-                                    message.media,
-                                    caption=message.text or ""
+                            if message.text:
+                                await self.client.send_message(
+                                    target_entity, 
+                                    f"📎 [Media] {message.text}"
                                 )
                             else:
-                                # Other media types
-                                await self.client.send_file(
-                                    target_entity,
-                                    message.media,
-                                    caption=message.text or ""
+                                await self.client.send_message(
+                                    target_entity, 
+                                    "📎 [Media content]"
                                 )
-                            self.logger.debug("Successfully copied media directly")
                             success = True
-                            
-                        except Exception as direct_error:
-                            # If direct copy fails (protected chat), download and re-upload
-                            self.logger.debug(f"Direct copy failed, trying download method: {direct_error}")
-                            
-                            # Download media to temporary file first
-                            import tempfile
-                            import os
-                            
-                            with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-                                temp_path = temp_file.name
-                                
-                            try:
-                                # Download to temporary file
-                                downloaded_path = await self.client.download_media(message, file=temp_path)
-                                
-                                if downloaded_path and os.path.exists(downloaded_path):
-                                    # Get original attributes for proper display
-                                    attributes = []
-                                    filename = None
-                                    
-                                    if hasattr(message.media, 'photo'):
-                                        # Photo - no special attributes needed
-                                        await self.client.send_file(
-                                            target_entity,
-                                            downloaded_path,
-                                            caption=message.text or ""
-                                        )
-                                    elif hasattr(message.media, 'document'):
-                                        # Document - preserve attributes
-                                        doc = message.media.document
-                                        if hasattr(doc, 'attributes'):
-                                            attributes = doc.attributes
-                                        
-                                        # Get original filename
-                                        for attr in attributes:
-                                            if hasattr(attr, 'file_name') and attr.file_name:
-                                                filename = attr.file_name
-                                                break
-                                        
-                                        # Send with preserved attributes
-                                        await self.client.send_file(
-                                            target_entity,
-                                            downloaded_path,
-                                            caption=message.text or "",
-                                            file_name=filename,
-                                            attributes=attributes
-                                        )
-                                    else:
-                                        # Generic media
-                                        await self.client.send_file(
-                                            target_entity,
-                                            downloaded_path,
-                                            caption=message.text or ""
-                                        )
-                                    
-                                    self.logger.debug("Successfully copied media via download")
-                                    success = True
-                                    
-                                else:
-                                    raise Exception("Download failed")
-                                    
-                            finally:
-                                # Clean up temporary file
-                                try:
-                                    if os.path.exists(temp_path):
-                                        os.unlink(temp_path)
-                                    if 'downloaded_path' in locals() and downloaded_path != temp_path and os.path.exists(downloaded_path):
-                                        os.unlink(downloaded_path)
-                                except:
-                                    pass
-                            
-                            # If download method also fails, send fallback message
-                            if not success:
-                                if message.text:
-                                    await self.client.send_message(
-                                        target_entity, 
-                                        f"📎 [Media from protected chat]\n{message.text}"
-                                    )
-                                    success = True
-                                else:
-                                    await self.client.send_message(
-                                        target_entity, 
-                                        "📎 [Media from protected chat - text extraction not available]"
-                                    )
-                                    success = True
-                    except Exception as media_error:
-                        self.logger.warning(f"Media copy failed, sending text only: {media_error}")
-                        # Fallback to text-only
-                        if message.text:
-                            await self.client.send_message(
-                                target_entity, 
-                                f"📎 [Media couldn't be copied]\n{message.text}"
-                            )
-                            success = True
-                        else:
-                            await self.client.send_message(
-                                target_entity, 
-                                "📎 [Protected media - content not accessible]"
-                            )
-                            success = True
+                        except Exception as fallback_error:
+                            self.logger.error(f"Fallback also failed: {fallback_error}")
+                            success = False
                 
                 # Handle text-only messages (if not handled above)
                 if not success:
