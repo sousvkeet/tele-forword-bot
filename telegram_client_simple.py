@@ -42,19 +42,21 @@ class SimpleTelegramClient:
         self.session_name = 'telegram_forwarder_simple'
         
         # Anti-detection settings
-        self.max_messages_per_minute = int(os.getenv('MAX_MESSAGES_PER_MINUTE', 10))
-        self.delay_between_forwards = int(os.getenv('DELAY_BETWEEN_FORWARDS', 3))
+        self.max_messages_per_minute = int(os.getenv('MAX_MESSAGES_PER_MINUTE', 60))  # Increased for faster forwarding
+        self.delay_between_forwards = float(os.getenv('DELAY_BETWEEN_FORWARDS', 0.1))  # Minimal delay for instant forwarding
         self.max_daily_forwards = int(os.getenv('MAX_DAILY_FORWARDS', 100))
         self.cooldown_hours = int(os.getenv('COOLDOWN_HOURS', 2))
         
-        # Rate limiting
-        self.throttler = Throttler(rate_limit=self.max_messages_per_minute, period=60)
+        # Fast mode settings
+        self.instant_mode = os.getenv('INSTANT_FORWARDING', 'true').lower() == 'true'
+        
+        # Rate limiting - more permissive for instant forwarding
+        rate_limit = 60 if self.instant_mode else self.max_messages_per_minute
+        self.throttler = Throttler(rate_limit=rate_limit, period=60)
+        
         self.daily_forward_count = 0
         self.last_reset_date = datetime.now().date()
         self.last_forward_time = None
-        
-        # Delays and human-like behavior
-        self.delay_between_forwards = float(os.getenv('DELAY_BETWEEN_FORWARDS', 1.0))
         
         # Error handling and ban protection
         self.consecutive_errors = 0
@@ -88,6 +90,12 @@ class SimpleTelegramClient:
         
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+        
+        # Log instant forwarding settings after logger is initialized
+        rate_limit = 60 if self.instant_mode else self.max_messages_per_minute
+        self.logger.info(f"🚀 Instant Forwarding Mode: {'ENABLED' if self.instant_mode else 'DISABLED'}")
+        self.logger.info(f"📊 Rate Limit: {rate_limit} messages/minute")
+        self.logger.info(f"⏱️  Delay Between Forwards: {self.delay_between_forwards}s")
 
     async def restore_session(self):
         """Restore existing Telegram session if available"""
@@ -538,6 +546,11 @@ class SimpleTelegramClient:
                 'message_id': event.message.id,
                 'chat_id': event.chat_id
             })
+            
+            # In instant mode, immediately wake up workers for faster processing
+            if self.instant_mode:
+                await asyncio.sleep(0)  # Yield control to allow immediate worker processing
+                
             self.logger.debug(f"Queued message {event.message.id} from chat {event.chat_id}")
         except asyncio.QueueFull:
             self.logger.warning("Message queue full, dropping message")
@@ -565,7 +578,9 @@ class SimpleTelegramClient:
                 
             except Exception as e:
                 self.logger.error(f"Worker {worker_name} error: {e}")
-                await asyncio.sleep(1)  # Brief pause on error
+                # Shorter pause in instant mode
+                pause_time = 0.2 if self.instant_mode else 1.0
+                await asyncio.sleep(pause_time)
         
         self.logger.info(f"Stopped message worker: {worker_name}")
     
@@ -717,11 +732,16 @@ class SimpleTelegramClient:
         try:
             # Rate limiting
             async with self.throttler:
-                # Add human-like delay
-                delay = random.uniform(
-                    self.delay_between_forwards * 0.5,
-                    self.delay_between_forwards * 1.5
-                )
+                # Smart delay - minimal in instant mode, normal otherwise
+                if self.instant_mode:
+                    # Very minimal delay for instant forwarding (just enough to prevent spam detection)
+                    delay = random.uniform(0.05, 0.15)  # 50-150ms
+                else:
+                    # Original human-like delay for stealth mode
+                    delay = random.uniform(
+                        self.delay_between_forwards * 0.5,
+                        self.delay_between_forwards * 1.5
+                    )
                 await asyncio.sleep(delay)
                 
                 # Get target entity
