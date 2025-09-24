@@ -758,34 +758,90 @@ class SimpleTelegramClient:
                         username_with_at = f"@{target}"
                         target_entity = await self.client.get_entity(username_with_at)
                 
-                # Copy message content instead of forwarding
-                if message.media:
-                    # Handle media messages (photo, video, document, etc.)
-                    if hasattr(message.media, 'photo'):
-                        # Photo
-                        await self.client.send_file(
-                            target_entity, 
-                            message.media.photo,
-                            caption=message.text or ""
-                        )
-                    elif hasattr(message.media, 'document'):
-                        # Video, document, sticker, etc.
-                        await self.client.send_file(
-                            target_entity,
-                            message.media.document,
-                            caption=message.text or ""
-                        )
-                    else:
-                        # Other media types
-                        await self.client.send_file(
-                            target_entity,
-                            message.media,
-                            caption=message.text or ""
-                        )
-                else:
-                    # Text-only message
+                # Copy message content instead of forwarding (bypasses protection)
+                success = False
+                
+                # Handle special message types first
+                if hasattr(message, 'poll') and message.poll:
+                    # Poll message
+                    poll_text = f"📊 **Poll:** {message.poll.question}\n"
+                    for i, answer in enumerate(message.poll.answers):
+                        poll_text += f"{i+1}. {answer.text}\n"
+                    await self.client.send_message(target_entity, poll_text)
+                    success = True
+                    
+                elif hasattr(message, 'contact') and message.contact:
+                    # Contact message
+                    contact_text = f"📞 **Contact:**\n"
+                    contact_text += f"Name: {message.contact.first_name} {message.contact.last_name or ''}\n"
+                    contact_text += f"Phone: {message.contact.phone_number}"
+                    await self.client.send_message(target_entity, contact_text)
+                    success = True
+                    
+                elif hasattr(message, 'geo') and message.geo:
+                    # Location message
+                    location_text = f"📍 **Location:**\n"
+                    location_text += f"Latitude: {message.geo.lat}\n"
+                    location_text += f"Longitude: {message.geo.long}"
+                    await self.client.send_message(target_entity, location_text)
+                    success = True
+                
+                # Handle media messages
+                elif message.media:
+                    try:
+                        # Download media to memory first, then re-upload to bypass protection
+                        self.logger.debug(f"Downloading media from protected chat...")
+                        media_bytes = await self.client.download_media(message, file=bytes)
+                        
+                        if media_bytes:
+                            # Re-upload the downloaded media
+                            await self.client.send_file(
+                                target_entity,
+                                media_bytes,
+                                caption=message.text or "",
+                                file_name=self._get_media_filename(message)
+                            )
+                            self.logger.debug("Successfully copied media from protected chat")
+                            success = True
+                        else:
+                            # Fallback: send text only if media download fails
+                            if message.text:
+                                await self.client.send_message(
+                                    target_entity, 
+                                    f"📎 [Media from protected chat]\n{message.text}"
+                                )
+                                success = True
+                            else:
+                                await self.client.send_message(
+                                    target_entity, 
+                                    "📎 [Media from protected chat - text extraction not available]"
+                                )
+                                success = True
+                    except Exception as media_error:
+                        self.logger.warning(f"Media copy failed, sending text only: {media_error}")
+                        # Fallback to text-only
+                        if message.text:
+                            await self.client.send_message(
+                                target_entity, 
+                                f"📎 [Media couldn't be copied]\n{message.text}"
+                            )
+                            success = True
+                        else:
+                            await self.client.send_message(
+                                target_entity, 
+                                "📎 [Protected media - content not accessible]"
+                            )
+                            success = True
+                
+                # Handle text-only messages (if not handled above)
+                if not success:
                     if message.text:
                         await self.client.send_message(target_entity, message.text)
+                        success = True
+                    else:
+                        # Empty message or unsupported content
+                        await self.client.send_message(target_entity, "[Empty or unsupported message]")
+                        success = True
                 
                 # Update counters
                 self.daily_forward_count += 1
@@ -858,6 +914,38 @@ class SimpleTelegramClient:
         except Exception as e:
             self.logger.error(f"Error getting user info: {e}")
             return {'success': False, 'message': str(e)}
+
+    def _get_media_filename(self, message):
+        """Get appropriate filename for media based on message type"""
+        try:
+            if message.media and hasattr(message.media, 'document') and message.media.document:
+                # Document with filename
+                for attr in message.media.document.attributes:
+                    if hasattr(attr, 'file_name') and attr.file_name:
+                        return attr.file_name
+                
+                # Generate filename based on document type
+                mime_type = getattr(message.media.document, 'mime_type', '')
+                if 'image' in mime_type:
+                    return f"image_{message.id}.jpg"
+                elif 'video' in mime_type:
+                    return f"video_{message.id}.mp4"
+                elif 'audio' in mime_type:
+                    return f"audio_{message.id}.mp3"
+                else:
+                    return f"file_{message.id}"
+            
+            elif message.media and hasattr(message.media, 'photo'):
+                # Photo
+                return f"photo_{message.id}.jpg"
+            
+            else:
+                # Unknown media type
+                return f"media_{message.id}"
+                
+        except Exception as e:
+            self.logger.debug(f"Error getting filename: {e}")
+            return f"media_{message.id}"
 
     def _should_skip_due_to_errors(self):
         """Check if we should skip processing due to error cooldown"""
